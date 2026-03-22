@@ -46,3 +46,7 @@ I can not stress this enough its incredibly dangerous, not even the code. the sy
 **License**
 
 you dont even have to credit me. just use it
+
+
+notes
+MANUALLY IMPORT THE .FUCC FILE
