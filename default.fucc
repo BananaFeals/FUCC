@@ -1,0 +1,25 @@
+# --- THE DEFAULT.FUCC CORE MANIFEST ---
+# "The essential toolkit for the dangerous admin."
+
+# --- SYSTEM MONITORING ---
+btop https://raw.githubusercontent.com/Aristocratos/btop/main/btop
+htop https://raw.githubusercontent.com/htop-dev/htop/master/htop
+neofetch https://raw.githubusercontent.com/dylanaraps/neofetch/master/neofetch ecb5822a74d37f760a7f90bc3cf5bb143e7bb6d9e3fc17fc21c8708529fdd26a
+pfetch https://raw.githubusercontent.com/dylanaraps/pfetch/master/pfetch
+
+# --- FILE & NETWORK UTILITIES ---
+duf https://raw.githubusercontent.com/muesli/duf/master/duf
+croc https://raw.githubusercontent.com/schollz/croc/master/croc
+speedtest https://raw.githubusercontent.com/sivel/speedtest-cli/master/speedtest_cli.py
+gdu https://raw.githubusercontent.com/dundee/gdu/master/gdu
+
+# --- TERMINAL EYE CANDY ---
+cmatrix https://raw.githubusercontent.com/abishekvashok/cmatrix/master/cmatrix
+pipes https://raw.githubusercontent.com/pipeseroni/pipes.sh/master/pipes.sh
+weather https://wttr.in/:bash
+clifetch https://raw.githubusercontent.com/tanrax/clifetch/main/clifetch
+
+# --- PRODUCTIVITY & FUN ---
+todo https://raw.githubusercontent.com/todotxt/todo.txt-cli/master/todo.sh
+wttr https://wttr.in/:bash
+map https://raw.githubusercontent.com/rastapasta/mapscii/master/mapscii
