@@ -1,0 +1,207 @@
+#!/bin/bash
+
+# --- THE FUCC PACKAGE MANAGER (STUPID EDITION V0.1) ---
+# "pls dont cry if you see how this works"
+
+BIN_DIR="/usr/local/bin"
+SOURCES_DIR="/etc/fucc/sources.d"
+USER_MANIFEST="$SOURCES_DIR/user.fucc"
+
+# --- CHECKS ---
+if [ "$EUID" -ne 0 ]; then
+    echo "[!] Fucc-ing requires root. Please run with sudo."
+    exit 1
+fi
+
+# Check for required tools
+for cmd in curl awk grep sed column; do
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+        echo "[X] Error: Required dependency '$cmd' is missing."
+        exit 1
+    fi
+done
+
+# Initialize directories
+mkdir -p "$SOURCES_DIR"
+touch "$USER_MANIFEST"
+
+# Helper for cross-platform hashing
+get_hash() {
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "$1" | awk '{print $1}'
+    else
+        shasum -a 256 "$1" | awk '{print $1}'
+    fi
+}
+
+usage() {
+    echo "FUCC - The UNRELEASED Edition"
+    echo "Usage:"
+    echo "  fucc -install <pkg> [--skip-hash] # Install from manifests"
+    echo "  fucc -delete <pkg>                # Remove binary from $BIN_DIR"
+    echo "  fucc -manifests                   # List all collection files"
+    echo "  fucc -list [manifest]             # List packages (all or specific)"
+    echo "  fucc -installed                   # List what's currently in your /bin"
+    echo "  fucc -search <keyword>            # Scour all lists for a match"
+    echo "  fucc -import <url> <name>         # Add a single tool to user.fucc"
+    echo "  fucc -fetch <url> <name>          # Download a new .fucc manifest"
+    exit 1
+}
+
+case "$1" in
+    -install)
+        TARGET=$2
+        SKIP_HASH=$3
+        [ -z "$TARGET" ] && usage
+
+        # 1. Collect matches from all .fucc files
+        MAP=$(grep -rH "^$TARGET " "$SOURCES_DIR"/*.fucc 2>/dev/null | sed "s|$SOURCES_DIR/||")
+        COUNT=$(echo "$MAP" | grep -v '^$' | wc -l)
+
+        if [ "$COUNT" -eq 0 ]; then
+            echo "[X] Error: '$TARGET' not found in any manifest."
+            exit 1
+        elif [ "$COUNT" -gt 1 ]; then
+            echo "[!] Multiple sources found for '$TARGET':"
+            IFS=$'\n'
+            PS3="Choose a source (1-$COUNT): "
+            select CHOICE in $MAP; do
+                if [ -n "$CHOICE" ]; then
+                    ENTRY=$CHOICE
+                    break
+                else
+                    echo "[!] Invalid choice."
+                fi
+            done
+            unset IFS
+        else
+            ENTRY=$MAP
+        fi
+
+        # 2. Extract Details (Column 4 = Dependencies)
+        REMOTE=$(echo "$ENTRY" | awk '{print $2}')
+        EXPECTED_HASH=$(echo "$ENTRY" | awk '{print $3}')
+        DEPS=$(echo "$ENTRY" | awk '{print $4}')
+
+        # 3. RECURSIVE DEPENDENCY CHECK
+        # If the package has dependencies and we aren't already in a sub-install loop
+        if [ -z "$FUCC_INTERNAL_CALL" ] && [ -n "$DEPS" ] && [ "$DEPS" != "-" ]; then
+            echo "[*] Dependency check for $TARGET..."
+            IFS=',' read -ra ADDR <<< "$DEPS"
+            for dep in "${ADDR[@]}"; do
+                # Check if the dependency is already in BIN_DIR
+                if [ ! -f "$BIN_DIR/$dep" ]; then
+                    echo "[>] Missing dependency: $dep. Fetching now..."
+                    # Set a flag to allow recursion but manage output
+                    FUCC_INTERNAL_CALL=1 $0 -install "$dep" "$SKIP_HASH"
+                else
+                    echo "[+] Dependency $dep already satisfied."
+                fi
+            done
+        fi
+
+        # 4. Proceed with Main Installation
+        echo "[*] Fucc-ing $TARGET from $REMOTE..."
+        
+        TEMP_FILE=$(mktemp)
+
+        if curl -L -s --fail "$REMOTE" -o "$TEMP_FILE"; then
+            
+            # Hash Verification
+            if [ "$SKIP_HASH" == "--skip-hash" ]; then
+                echo "[!] Skipping hash verification as requested."
+            elif [ -n "$EXPECTED_HASH" ] && [ "$EXPECTED_HASH" != "-" ]; then
+                echo "[*] Verifying SHA-256 hash..."
+                ACTUAL_HASH=$(get_hash "$TEMP_FILE")
+
+                if [ "$ACTUAL_HASH" != "$EXPECTED_HASH" ]; then
+                    echo "[X] HASH MISMATCH!"
+                    echo "    Expected: $EXPECTED_HASH"
+                    echo "    Actual:   $ACTUAL_HASH"
+                    rm -f "$TEMP_FILE"
+                    exit 1
+                fi
+                echo "[+] Hash verified."
+            else
+                # Don't prompt if it's an internal dependency call to avoid spam
+                if [ -z "$FUCC_INTERNAL_CALL" ]; then
+                    echo "[!] Warning: No hash provided in manifest."
+                    read -p "    Continue with unverified install? (y/N): " confirm
+                    [[ "$confirm" != [yY] ]] && rm -f "$TEMP_FILE" && exit 1
+                fi
+            fi
+
+            # 5. Atomic Deployment
+            chmod +x "$TEMP_FILE"
+            if [ -n "$SUDO_USER" ]; then
+                chown "$SUDO_USER" "$TEMP_FILE"
+            fi
+
+            mv "$TEMP_FILE" "$BIN_DIR/$TARGET"
+            echo "[+] Success: $TARGET is ready."
+        else
+            echo "[X] Download failed. Check the URL: $REMOTE"
+            rm -f "$TEMP_FILE"
+            exit 1
+        fi
+        ;;
+
+    "-manifests")
+        echo "[*] Available Manifests:"
+        ls -1 "$SOURCES_DIR" | sed 's/\.fucc//' | column
+        ;;
+
+    "-list")
+        if [ -z "$2" ]; then
+            echo "[*] Global Package Registry:"
+            grep -rh "^[^#]" "$SOURCES_DIR"/*.fucc 2>/dev/null | awk '{print $1}' | sort | column
+        else
+            SPECIFIC="$SOURCES_DIR/$2.fucc"
+            if [ -f "$SPECIFIC" ]; then
+                echo "[*] Packages in '$2':"
+                grep "^[^#]" "$SPECIFIC" | awk '{print $1}' | sort | column
+            else
+                echo "[X] Error: Manifest '$2' not found."
+            fi
+        fi
+        ;;
+
+    "-installed")
+        echo "[*] Currently 'Fucc-ed' Binaries in $BIN_DIR:"
+        ls -1 "$BIN_DIR" | column
+        ;;
+
+    "-delete")
+        TARGET=$2
+        if [ -f "$BIN_DIR/$TARGET" ]; then
+            rm "$BIN_DIR/$TARGET" && echo "[-] $TARGET erased."
+        else
+            echo "[X] $TARGET not found in $BIN_DIR"
+        fi
+        ;;
+
+    "-import")
+        # Usage: fucc -import <url> <name> [hash]
+        [ -z "$3" ] && usage
+        NAME=$3
+        URL=$2
+        HASH=${4:-"-"}
+        sed -i "/^$NAME /d" "$USER_MANIFEST"
+        echo "$NAME $URL $HASH" >> "$USER_MANIFEST"
+        echo "[+] Added '$NAME' to user.fucc"
+        ;;
+
+    "-fetch")
+        [ -z "$3" ] && usage
+        curl -L -s --fail "$2" -o "$SOURCES_DIR/$3.fucc" && echo "[+] Manifest '$3' imported."
+        ;;
+
+    "-search")
+        [ -z "$2" ] && usage
+        grep -ri "$2" "$SOURCES_DIR"/*.fucc 2>/dev/null | sed "s|$SOURCES_DIR/||"
+        ;;
+
+    *)
+        usage
+        ;;
+esac
