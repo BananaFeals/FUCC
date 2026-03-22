@@ -6,6 +6,8 @@ while it does not require servers. it does rely on "Repo" files these being
 
 >.fucc
 
+which are placed in the "/etc/fucc/sources.d" directory
+
 the strict formatting for a package in the repo file is
 
 >[name] [url/ip] [hash] [dependencies,dependencies]
