@@ -18,11 +18,15 @@ the strict formatting for a package in the repo file is
 >
 >...
 
-**Dependencies**
+**Dependencies in the Repo**
+yeah they have to be listed separately within it, its a recursive function
+
+**Dependencies of the Fucc**
 
 curl,awk,grep,sed,column,sha256sum,shasum
 
 just curl and GNU core utils
+
 
 
 
